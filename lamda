@@ -1,0 +1,60 @@
+import boto3
+from botocore.exceptions import ClientError
+from datetime import datetime
+
+s3 = boto3.client('s3')
+sns = boto3.client('sns')
+
+SNS_TOPIC_ARN = "arn:aws:sns:REGION:ACCOUNT_ID:SecurityAutoFixAlert"
+
+def lambda_handler(event, context):
+    fixed_buckets = []
+    secured_buckets = []
+    all_buckets = []
+
+    buckets = s3.list_buckets()['Buckets']
+
+    for bucket in buckets:
+        name = bucket['Name']
+        all_buckets.append(name)
+
+        try:
+            s3.get_public_access_block(Bucket=name)
+            secured_buckets.append(name)
+
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchPublicAccessBlockConfiguration':
+                s3.put_public_access_block(
+                    Bucket=name,
+                    PublicAccessBlockConfiguration={
+                        'BlockPublicAcls': True,
+                        'IgnorePublicAcls': True,
+                        'BlockPublicPolicy': True,
+                        'RestrictPublicBuckets': True
+                    }
+                )
+                fixed_buckets.append(name)
+
+    sns.publish(
+        TopicArn=SNS_TOPIC_ARN,
+        Subject="S3 Security Auto-Remediation Alert",
+        Message=(
+            "S3 Scan Completed\n\n"
+            f"Buckets Checked:\n{all_buckets}\n\n"
+            f"Buckets Fixed:\n{fixed_buckets}"
+        )
+    )
+
+    return {
+        "statusCode": 200,
+        "time": datetime.utcnow().isoformat(),
+        "fixedBuckets": fixed_buckets
+    }
+🔴 Replace:
+
+REGION
+
+ACCOUNT_ID
+
+RTEST CASE
+{}
